@@ -1,0 +1,76 @@
+services:
+  postgres_exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter
+    container_name: postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://alikhan:123456789@host.docker.internal:5432/hospital?sslmode=disable"
+    ports:
+      - "9187:9187"
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - monitoring_net
+  
+  node-exporter:
+    image: prom/node-exporter
+    container_name: node-exporter
+    ports:
+      - "9100:9100"
+    restart: unless-stopped
+    command:
+      - '--path.rootfs=/host'
+    volumes:
+      - /:/host:ro,rslave
+    networks:
+      - monitoring_net
+  
+  custom-exporter:
+    image: python:3.11-slim
+    container_name: custom-exporter
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./custom_exporter.py:/app/custom_exporter.py
+    working_dir: /app
+    command: >
+      sh -c "pip install prometheus-client requests && python custom_exporter.py"
+    restart: unless-stopped
+    networks:
+      - monitoring_net
+  
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    restart: unless-stopped
+    networks:
+      - monitoring_net
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    restart: unless-stopped
+    networks:
+      - monitoring_net
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  
+networks:
+  monitoring_net:
+    driver: bridge
